@@ -1,4 +1,4 @@
-name: 진단 (일회성)
+name: 진단 — 야후 일봉 상태
 
 on:
   workflow_dispatch:

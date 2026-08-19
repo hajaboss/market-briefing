@@ -27,6 +27,11 @@ MARKETS = {
 }
 CONTINUOUS = {"fx": "외환", "futures": "선물", "crypto": "코인"}
 
+# 1년 일봉이 이보다 적게 오면 52주 고점을 믿지 않는다.
+# 야후가 특정 티커에 대해 시계열을 한두 건만 돌려주는 일이 실제로 있다
+# (GitHub 러너 IP에서 ^KS200이 당일 1건만 와서 "당일 장중가 = 52주 고점"이 됨).
+MIN_HIGH_BARS = 150
+
 
 class Quote:
     def __init__(self, item):
@@ -41,10 +46,16 @@ class Quote:
         self.last_ts = None        # 마지막 체결 시각 (시장 현지 시간)
         self.high_52w = None       # 52주 장중 최고가
         self.high_date = None
+        self.high_bars = 0         # 고점 산출에 쓴 일봉 건수
 
     @property
     def ok(self):
         return self.last is not None and self.prev is not None
+
+    @property
+    def high_ok(self):
+        """52주 고점을 믿을 만한가. 일봉이 너무 적으면 고점이 아니라 최근값이다."""
+        return self.high_52w is not None and self.high_bars >= MIN_HIGH_BARS
 
     @property
     def date(self):
@@ -105,7 +116,32 @@ def fetch_quotes(groups, retries=2):
             _apply_daily([q], _download([q.ticker], "1y", "1d"))
             _apply_fast_info(q)
 
+    _repair_highs(quotes, retries)
     return quotes
+
+
+def _repair_highs(quotes, retries=2):
+    """일봉이 잘려 온 티커의 52주 고점을 개별 재조회로 되살린다.
+
+    배치 다운로드에서만 잘리고 개별 조회로는 멀쩡히 오는 경우가 있다.
+    끝내 못 채우면 틀린 고점을 보여주느니 아예 비운다 —
+    `fast_info`의 yearHigh도 같은 잘린 응답에서 나오므로 대안이 못 된다.
+    """
+    for attempt in range(retries):
+        short = [q for q in quotes if not q.high_ok]
+        if not short:
+            break
+        for q in short:
+            time.sleep(0.3)
+            _apply_daily([q], _download([q.ticker], "1y", "1d"), high_only=True)
+
+    for q in quotes:
+        if not q.high_ok:
+            print(f"[고점] {q.name}: 일봉 {q.high_bars}건뿐 — 52주 고점 생략")
+            q.high_52w = None
+            q.high_date = None
+        elif q.last is not None and q.last > q.high_52w:
+            q.high_52w = q.last      # 장중 신고가
 
 
 def _download(tickers, period, interval):
@@ -138,24 +174,34 @@ def _download(tickers, period, interval):
     return out
 
 
-def _apply_daily(quotes, downloaded):
-    """52주 전고점을 채우고, 시세는 일단 일봉 기준으로 채워둔다."""
+def _apply_daily(quotes, downloaded, high_only=False):
+    """52주 전고점을 채우고, 시세는 일단 일봉 기준으로 채워둔다.
+
+    high_only=True면 고점만 손본다. 고점 재조회 때 이미 fast_info로 채워둔
+    현재가를 며칠 지난 일봉 종가로 되돌리지 않기 위한 것.
+    """
     for q in quotes:
         pair = downloaded.get(q.ticker)
         if pair is None:
             continue
         close, high = pair
 
-        c = close.dropna()
-        if len(c) >= 2:
-            q.last = float(c.iloc[-1])
-            q.prev = float(c.iloc[-2])
-            q.last_ts = _to_market_time(c.index[-1], q.market)
+        if not high_only:
+            c = close.dropna()
+            if len(c) >= 2:
+                q.last = float(c.iloc[-1])
+                q.prev = float(c.iloc[-2])
+                q.last_ts = _to_market_time(c.index[-1], q.market)
 
         h = high.dropna()
-        if len(h):
-            q.high_52w = float(h.max())
-            q.high_date = h.idxmax().date()
+        # 재조회분이 더 긴 시계열일 때만 갱신한다. 잘린 응답이 멀쩡한 고점을
+        # 덮어쓰지 않도록 건수와 값을 모두 비교한다.
+        if len(h) and (len(h) > q.high_bars or q.high_52w is None
+                       or float(h.max()) > q.high_52w):
+            if float(h.max()) > (q.high_52w or 0):
+                q.high_52w = float(h.max())
+                q.high_date = h.idxmax().date()
+            q.high_bars = max(q.high_bars, len(h))
 
 
 def _apply_intraday(quotes, downloaded):
