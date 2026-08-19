@@ -25,6 +25,7 @@ NAME_W = 9
 VALUE_W = 10
 UNIT_W = 3
 PCT_W = 8
+CHANGE_W = 7      # 아랫줄 변화량 칸. 늘리면 전고점이 31칸 밖으로 밀린다
 
 # compact 레이아웃 칸 너비
 C_NAME_W = 9
@@ -91,11 +92,13 @@ def _render_detailed(q, base_date, name_w=NAME_W):
     if base_date and q.date and q.date != base_date and not q.continuous:
         head += f" {q.date.month}/{q.date.day}"
 
-    tail = "   " + _rjust(_fmt_change(q), 9)
+    # 텔레그램 <pre>는 줄바꿈 없이 가로 스크롤한다. 아랫줄이 윗줄(31칸)보다
+    # 넓어지면 오른쪽 끝의 전고점이 화면 밖으로 밀려 보이지 않는다. 폭을 맞춘다.
+    tail = "  " + _rjust(_fmt_change(q), CHANGE_W)
     if q.high_52w and q.drawdown_pct is not None:
         gap = (f"{(q.last - q.high_52w) * 100:+.0f}bp" if q.fmt == "rate"
                else f"{q.drawdown_pct:+.1f}%")
-        tail += f"  고점 {_fmt_value(q.high_52w, q.fmt)} ({gap})"
+        tail += f"  고점 {_fmt_value(q.high_52w, q.fmt)} {gap}"
     return head + "\n" + tail
 
 
