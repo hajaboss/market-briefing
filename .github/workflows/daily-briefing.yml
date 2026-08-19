@@ -1,0 +1,45 @@
+name: 시장지표 브리핑
+
+on:
+  schedule:
+    # 23:00 UTC(일~목) = 08:00 KST(월~금)
+    # GitHub의 cron은 혼잡 시 수 분~수십 분 지연될 수 있다.
+    - cron: '0 23 * * 0-4'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: '주말에도 강제 발송'
+        type: boolean
+        default: false
+      dry_run:
+        description: '발송하지 않고 로그로만 확인'
+        type: boolean
+        default: false
+
+concurrency:
+  group: daily-briefing
+  cancel-in-progress: false
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: 브리핑 발송
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          PYTHONIOENCODING: utf-8
+        run: |
+          python src/main.py \
+            ${{ inputs.force && '--force' || '' }} \
+            ${{ inputs.dry_run && '--dry-run' || '' }}

@@ -1,0 +1,8 @@
+# 자격증명 — 절대 커밋하지 않는다
+config.local.json
+.env
+
+__pycache__/
+*.py[cod]
+.venv/
+venv/

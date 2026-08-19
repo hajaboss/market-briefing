@@ -1,0 +1,184 @@
+{
+    "telegram": {
+        "bot_token": "",
+        "chat_id": ""
+    },
+    "groups": [
+        {
+            "title": "🇰🇷 국내 증시",
+            "items": [
+                {
+                    "name": "코스피",
+                    "ticker": "^KS11",
+                    "fmt": "num",
+                    "market": "kr",
+                    "unit": "pt",
+                    "watch_drawdown": true
+                },
+                {
+                    "name": "코스피200",
+                    "ticker": "^KS200",
+                    "fmt": "num",
+                    "unit": "pt",
+                    "market": "kr",
+                    "watch_drawdown": true
+                },
+                {
+                    "name": "코스닥",
+                    "ticker": "^KQ11",
+                    "fmt": "num",
+                    "market": "kr",
+                    "unit": "pt",
+                    "watch_drawdown": true
+                },
+                {
+                    "name": "원/달러",
+                    "ticker": "USDKRW=X",
+                    "fmt": "num",
+                    "market": "fx",
+                    "unit": "원",
+                    "watch_drawdown": false
+                }
+            ]
+        },
+        {
+            "title": "🌎 해외 증시",
+            "items": [
+                {
+                    "name": "S&P 500",
+                    "ticker": "^GSPC",
+                    "fmt": "num",
+                    "market": "us",
+                    "unit": "pt",
+                    "watch_drawdown": true
+                },
+                {
+                    "name": "나스닥",
+                    "ticker": "^IXIC",
+                    "fmt": "num",
+                    "market": "us",
+                    "unit": "pt",
+                    "watch_drawdown": true
+                },
+                {
+                    "name": "나스닥100",
+                    "ticker": "^NDX",
+                    "fmt": "num",
+                    "unit": "pt",
+                    "market": "us",
+                    "watch_drawdown": true
+                },
+                {
+                    "name": "다우",
+                    "ticker": "^DJI",
+                    "fmt": "num",
+                    "market": "us",
+                    "unit": "pt",
+                    "watch_drawdown": true
+                },
+                {
+                    "name": "닛케이",
+                    "ticker": "^N225",
+                    "fmt": "num",
+                    "market": "jp",
+                    "unit": "pt",
+                    "watch_drawdown": true
+                },
+                {
+                    "name": "상해종합",
+                    "ticker": "000001.SS",
+                    "fmt": "num",
+                    "market": "cn",
+                    "unit": "pt",
+                    "watch_drawdown": true
+                }
+            ]
+        },
+        {
+            "title": "⚠️ 위험·금리",
+            "items": [
+                {
+                    "name": "VIX",
+                    "ticker": "^VIX",
+                    "fmt": "num",
+                    "market": "us",
+                    "unit": "pt",
+                    "watch_drawdown": false
+                },
+                {
+                    "name": "미10년물",
+                    "ticker": "^TNX",
+                    "fmt": "rate",
+                    "market": "us",
+                    "unit": "",
+                    "watch_drawdown": false
+                },
+                {
+                    "name": "달러지수",
+                    "ticker": "DX-Y.NYB",
+                    "fmt": "num",
+                    "market": "us",
+                    "unit": "pt",
+                    "watch_drawdown": false
+                }
+            ]
+        },
+        {
+            "title": "🛢️ 원자재·코인",
+            "items": [
+                {
+                    "name": "WTI유가",
+                    "ticker": "CL=F",
+                    "fmt": "num",
+                    "market": "futures",
+                    "unit": "$",
+                    "watch_drawdown": false
+                },
+                {
+                    "name": "금",
+                    "ticker": "GC=F",
+                    "fmt": "num",
+                    "market": "futures",
+                    "unit": "$",
+                    "watch_drawdown": false
+                },
+                {
+                    "name": "은",
+                    "ticker": "SI=F",
+                    "fmt": "num",
+                    "unit": "$",
+                    "market": "futures",
+                    "watch_drawdown": false
+                },
+                {
+                    "name": "비트코인",
+                    "ticker": "BTC-USD",
+                    "fmt": "num",
+                    "market": "crypto",
+                    "unit": "$",
+                    "watch_drawdown": false
+                },
+                {
+                    "name": "이더리움",
+                    "ticker": "ETH-USD",
+                    "fmt": "num",
+                    "market": "crypto",
+                    "unit": "$",
+                    "watch_drawdown": false
+                }
+            ]
+        }
+    ],
+    "alerts": {
+        "big_move_pct": 2.0,
+        "vix_warn": 20.0,
+        "usdkrw_warn": 1450.0,
+        "rate_move_bp": 10.0,
+        "drawdown_warn_pct": -15.0
+    },
+    "options": {
+        "skip_weekend": true,
+        "run_time": "08:00",
+        "layout": "detailed"
+    }
+}
