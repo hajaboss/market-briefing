@@ -20,6 +20,9 @@ concurrency:
   group: daily-briefing
   cancel-in-progress: false
 
+permissions:
+  contents: write        # data/highs.json 을 다시 커밋하기 위해 필요
+
 jobs:
   send:
     runs-on: ubuntu-latest
@@ -43,3 +46,19 @@ jobs:
           python src/main.py \
             ${{ inputs.force && '--force' || '' }} \
             ${{ inputs.dry_run && '--dry-run' || '' }}
+
+      # 야후는 러너 IP에 따라 일부 티커의 일봉을 한두 건만 돌려준다.
+      # 누적해 둔 고가가 있어야 52주 고점이 흔들리지 않으므로 되돌려 커밋한다.
+      - name: 고점 저장소 갱신 커밋
+        if: always()
+        run: |
+          if git diff --quiet -- data/highs.json; then
+            echo "변경 없음"
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/highs.json
+          git commit -m "데이터: 52주 고점 저장소 갱신 [skip ci]"
+          git pull --rebase --autostash origin main
+          git push origin HEAD:main

@@ -16,6 +16,8 @@ from zoneinfo import ZoneInfo
 
 import yfinance as yf
 
+import high_store
+
 warnings.filterwarnings("ignore", category=FutureWarning)
 
 # 시장별 정규 마감 시각. (시간대, 시, 분, 표기명)
@@ -47,6 +49,7 @@ class Quote:
         self.high_52w = None       # 52주 장중 최고가
         self.high_date = None
         self.high_bars = 0         # 고점 산출에 쓴 일봉 건수
+        self.high_series = {}      # 이번에 받은 {날짜: 고가}. 저장소에 합칠 원본
 
     @property
     def ok(self):
@@ -116,32 +119,40 @@ def fetch_quotes(groups, retries=2):
             _apply_daily([q], _download([q.ticker], "1y", "1d"))
             _apply_fast_info(q)
 
-    _repair_highs(quotes, retries)
+    _finalize_highs(quotes)
     return quotes
 
 
-def _repair_highs(quotes, retries=2):
-    """일봉이 잘려 온 티커의 52주 고점을 개별 재조회로 되살린다.
+def _finalize_highs(quotes, store_path=None):
+    """이번에 받은 일봉을 저장소에 합친 뒤 52주 고점을 확정한다.
 
-    배치 다운로드에서만 잘리고 개별 조회로는 멀쩡히 오는 경우가 있다.
-    끝내 못 채우면 틀린 고점을 보여주느니 아예 비운다 —
+    잘린 응답이 와도 저장소에 쌓인 과거가 남아 있으므로 고점이 흔들리지 않는다.
+    저장소가 비어 있고 응답도 짧으면 틀린 고점을 보여주느니 생략한다 —
     `fast_info`의 yearHigh도 같은 잘린 응답에서 나오므로 대안이 못 된다.
     """
-    for attempt in range(retries):
-        short = [q for q in quotes if not q.high_ok]
-        if not short:
-            break
-        for q in short:
-            time.sleep(0.3)
-            _apply_daily([q], _download([q.ticker], "1y", "1d"), high_only=True)
+    path = store_path or high_store.PATH
+    store = high_store.load(path)
 
     for q in quotes:
+        if q.high_series:
+            high_store.merge(store, q.ticker, q.high_series)
+    high_store.prune(store)
+
+    for q in quotes:
+        value, when, bars = high_store.peak(store, q.ticker)
+        q.high_52w, q.high_date, q.high_bars = value, when, bars
+
         if not q.high_ok:
-            print(f"[고점] {q.name}: 일봉 {q.high_bars}건뿐 — 52주 고점 생략")
+            print(f"[고점] {q.name}: 누적 일봉 {bars}건뿐 — 52주 고점 생략")
             q.high_52w = None
             q.high_date = None
         elif q.last is not None and q.last > q.high_52w:
             q.high_52w = q.last      # 장중 신고가
+
+    try:
+        high_store.save(store, path)
+    except OSError as e:
+        print(f"[고점] 저장소 기록 실패: {e}")
 
 
 def _download(tickers, period, interval):
@@ -194,14 +205,8 @@ def _apply_daily(quotes, downloaded, high_only=False):
                 q.last_ts = _to_market_time(c.index[-1], q.market)
 
         h = high.dropna()
-        # 재조회분이 더 긴 시계열일 때만 갱신한다. 잘린 응답이 멀쩡한 고점을
-        # 덮어쓰지 않도록 건수와 값을 모두 비교한다.
-        if len(h) and (len(h) > q.high_bars or q.high_52w is None
-                       or float(h.max()) > q.high_52w):
-            if float(h.max()) > (q.high_52w or 0):
-                q.high_52w = float(h.max())
-                q.high_date = h.idxmax().date()
-            q.high_bars = max(q.high_bars, len(h))
+        for ts, value in h.items():
+            q.high_series[ts.date()] = float(value)
 
 
 def _apply_intraday(quotes, downloaded):
