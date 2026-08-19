@@ -1,7 +1,15 @@
 # 시장지표 알리미 — GitHub Actions 이전 작업 인계
 
-작성: 2026-08-19 (새벽)
-상태: **로컬 준비 완료 / GitHub 업로드 전** — 아직 아무것도 외부로 나가지 않음
+작성: 2026-08-19 (새벽) / 완료: 2026-08-20
+상태: **이전 완료.** GitHub Actions에서 매일 08:00 KST 발송 중
+
+| 항목 | 값 |
+|---|---|
+| 저장소 | https://github.com/hajaboss/market-briefing (공개) |
+| 계정 | `hajaboss` |
+| Secrets | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` 등록됨 |
+| 검증 | dry-run 성공 → 실제 발송 성공 (지표 18/18 수집) |
+| 로컬 작업 스케줄러 | **비활성화됨** (중복 발송 방지) |
 
 ---
 
@@ -101,56 +109,46 @@ chat_id 문자열로 훑어 **잔존 비밀 0건** 확인.
 
 ---
 
-## 내일 할 일
+## 이전 실행 기록 (2026-08-20 완료)
 
-### 결정해야 하는 것
+| 단계 | 결과 |
+|---|---|
+| 저장소 공개 범위 | **공개** 선택 (Actions 시간 무제한) |
+| gh CLI | winget으로 2.97.0 설치, `repo`+`workflow` 스코프로 인증 |
+| git 초기화·커밋 | `c4f1eb6` 초기 커밋, 12개 파일 |
+| 저장소 생성·푸시 | `gh repo create market-briefing --public --source=. --push` |
+| Secrets 등록 | `config.local.json`에서 값을 읽어 stdin으로 주입 |
+| dry-run 검증 | 성공 |
+| 실제 발송 | 성공 — 지표 18/18, 텔레그램 도착 확인 |
+| 로컬 작업 비활성화 | `Disable-ScheduledTask` 완료 (삭제는 안 함) |
 
-1. **저장소 공개 범위**
-   - 비공개(권장) — Actions 무료 한도 월 2,000분, 이 작업은 월 30분 수준이라 충분
-   - 공개 — Actions 무제한이지만 코드와 지표 구성이 전부 노출
-2. **`gh` CLI 설치 여부** — 현재 미설치 (`git`은 있음)
-   - 설치하면 저장소 생성·푸시·Secrets 등록까지 자동
-   - 안 하면 웹에서 빈 저장소를 만들고 URL을 주면 푸시만 진행, Secrets는 수동 등록
+### 함정 — `gh secret set --body -` ★
 
-### 실행 순서
+stdin에서 값을 읽히려고 `--body -`를 썼는데, gh는 이걸 **stdin 표시가 아니라
+리터럴 문자열 `-`** 로 받아 Secret 값이 `-` 한 글자가 됐다.
+
+발송을 안 하는 dry-run이라 **성공으로 통과했고**, 로그의 모든 하이픈이 `***`로
+마스킹된 것(`setup***python`, `***6.41%`)만이 유일한 단서였다.
+GitHub이 Secret 값을 로그에서 가리기 때문에 벌어진 현상.
+
+올바른 방법은 `--body`를 아예 빼는 것:
 
 ```bash
-# 1) git 초기화 (아직 저장소 아님)
-git init && git add -A && git commit -m "초기 커밋"
-#    ※ git global user.name / user.email 미설정 상태 — 먼저 설정 필요
-
-# 2) 저장소 생성 + 푸시
-gh repo create <이름> --private --source=. --push
-
-# 3) Secrets 등록  ← 이거 빠뜨리면 발송 실패
-gh secret set TELEGRAM_BOT_TOKEN
-gh secret set TELEGRAM_CHAT_ID
-#    값은 config.local.json 에 있음
-
-# 4) 수동 실행으로 검증
-gh workflow run daily-briefing.yml -f dry_run=true    # 먼저 dry-run
-gh workflow run daily-briefing.yml -f force=true      # 실제 발송
-gh run watch
+python -c "..." | gh secret set TELEGRAM_BOT_TOKEN
 ```
 
-### 5) 로컬 작업 스케줄러 정리 ← **잊지 말 것**
-
-Actions가 정상 동작하는 걸 확인한 뒤 로컬 작업을 꺼야 한다.
-안 그러면 PC 켜져 있는 날에 **브리핑이 두 번 온다.**
-
-```powershell
-Disable-ScheduledTask -TaskName "시장지표알리미"
-```
-
-바로 지우지 말고 며칠 비활성만 해두고 지켜볼 것.
-
----
+교훈 두 가지:
+- **dry-run 성공은 자격증명이 맞다는 증거가 아니다.** 실제 발송까지 해봐야 안다.
+- 로그에 `***`가 예상 밖의 위치에 나오면 Secret 값이 잘못 들어갔다는 신호다.
 
 ## 주의사항
 
 - **GitHub cron은 정시 보장이 안 된다.** 혼잡 시간대엔 5~30분 지연이 흔하다.
   분 단위 정확도가 필요하면 Actions는 맞지 않는다. (아침 브리핑엔 무방)
-- **무료 한도는 비공개 저장소에만 적용**되고 매달 초기화된다.
+- **무료 한도는 비공개 저장소에만 적용**되고 매달 초기화된다. 이 저장소는 공개라 무제한.
+- **공개 저장소도 60일간 커밋이 없으면 스케줄 cron이 자동 비활성화된다.**
+  GitHub이 메일로 알려주며, Actions 탭에서 "Enable workflow"를 누르면 되살아난다.
+  지표를 가끔 손보면 자연히 갱신되지만, 두 달 넘게 안 건드리면 조용히 멈출 수 있다.
 - 봇 토큰이 실수로 커밋되면 되돌리기 어렵다. BotFather에서 `/revoke`로
   즉시 폐기하고 새로 발급받는 게 유일하게 확실한 대처다.
 - yfinance 일봉 지연 문제(메모리에 기록된 함정)는 이번 변경과 무관하며
@@ -160,8 +158,14 @@ Disable-ScheduledTask -TaskName "시장지표알리미"
 
 ## 되돌리려면
 
-아직 git 저장소가 아니라 커밋 이력이 없다. 원상복구하려면:
+Actions를 멈추고 로컬로 돌아가려면:
 
-1. `config.local.json`의 telegram 값을 `config.json`에 다시 넣기
-2. `.github/`, `.gitignore`, `config.local.json`, 이 문서 삭제
-3. `src/main.py`의 `datetime.now(KST)` → `datetime.now()` (권장하지 않음, 로컬에선 무해)
+```bash
+gh workflow disable daily-briefing.yml          # Actions 스케줄 중지
+```
+```powershell
+Enable-ScheduledTask -TaskName "시장지표알리미"   # 로컬 작업 재개
+```
+
+로컬 작업은 지우지 않고 비활성화만 해뒀으므로 바로 되살릴 수 있다.
+단 로컬은 PC가 켜져 있어야만 도는 원래의 한계가 그대로다.
