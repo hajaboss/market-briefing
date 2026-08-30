@@ -43,17 +43,27 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           today=$(TZ=Asia/Seoul date +%F)
+
           # 오늘(KST) 성공했거나 아직 돌고 있는 다른 실행을 센다. dry-run 실행은 제외한다.
-          done_count=$(gh run list \
-            --workflow daily-briefing.yml \
-            --limit 30 \
-            --json databaseId,status,conclusion,createdAt,displayTitle \
-            --jq "[ .[]
-                    | select(.databaseId != $GITHUB_RUN_ID)
-                    | select((.displayTitle | test(\"dry-run\")) | not)
-                    | select(.conclusion == \"success\" or .status == \"queued\" or .status == \"in_progress\")
-                    | select((.createdAt | fromdateiso8601 + 32400 | strftime(\"%Y-%m-%d\")) == \"$today\")
-                  ] | length")
+          filter="[ .[]
+            | select(.databaseId != $GITHUB_RUN_ID)
+            | select((.displayTitle | test(\"dry-run\")) | not)
+            | select(.conclusion == \"success\" or .status == \"queued\" or .status == \"in_progress\")
+            | select((.createdAt | fromdateiso8601 + 32400 | strftime(\"%Y-%m-%d\")) == \"$today\")
+          ] | length"
+
+          fields=databaseId,status,conclusion,createdAt,displayTitle
+          done_count=$(gh run list --workflow daily-briefing.yml --limit 30 --json "$fields" --jq "$filter") || done_count=""
+
+          # 조회가 실패하면 발송 쪽으로 넘어간다. 누락된 브리핑보다 중복된 브리핑이 낫다.
+          case "$done_count" in
+            ""|*[!0-9]*)
+              echo "실행 이력 조회 실패(응답 [$done_count]). 누락보다 중복이 낫다고 보고 발송을 진행한다."
+              echo "skip=false" >> "$GITHUB_OUTPUT"
+              exit 0
+              ;;
+          esac
+
           if [ "$done_count" -gt 0 ]; then
             echo "오늘($today) 이미 처리된 실행이 ${done_count}건 있어 백업 발송을 건너뛴다."
             echo "skip=true" >> "$GITHUB_OUTPUT"
@@ -80,10 +90,7 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           PYTHONIOENCODING: utf-8
-        run: |
-          python src/main.py \
-            ${{ inputs.force && '--force' || '' }} \
-            ${{ inputs.dry_run && '--dry-run' || '' }}
+        run: python src/main.py ${{ inputs.force && '--force' || '' }} ${{ inputs.dry_run && '--dry-run' || '' }}
 
       # 야후는 러너 IP에 따라 일부 티커의 일봉을 한두 건만 돌려준다.
       # 누적해 둔 고가가 있어야 52주 고점이 흔들리지 않으므로 되돌려 커밋한다.
