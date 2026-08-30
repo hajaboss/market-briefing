@@ -1,10 +1,14 @@
 name: 시장지표 브리핑
+run-name: 시장지표 브리핑${{ inputs.dry_run && ' (dry-run)' || '' }}
 
 on:
   schedule:
-    # 23:00 UTC(일~목) = 08:00 KST(월~금)
-    # GitHub의 cron은 혼잡 시 수 분~수십 분 지연될 수 있다.
-    - cron: '0 23 * * 0-4'
+    # ── 백업 경로 ──
+    # 주 트리거는 Cloudflare Worker가 23:00 UTC(08:00 KST)에 workflow_dispatch로 쏜다(trigger/ 참고).
+    # GitHub의 schedule cron은 정각이 가장 혼잡해 상시 26~30분, 심하면 몇 시간까지 밀린다.
+    # 그래서 여기는 목표 시각보다 30분 뒤·비정각에 두고, 주 트리거가 이미 발송했으면 스스로 건너뛴다.
+    # (60일간 커밋이 없으면 공개 저장소도 schedule이 자동 비활성화되므로 이 백업만 믿으면 안 된다.)
+    - cron: '30 23 * * 0-4'
   workflow_dispatch:
     inputs:
       force:
@@ -22,22 +26,56 @@ concurrency:
 
 permissions:
   contents: write        # data/highs.json 을 다시 커밋하기 위해 필요
+  actions: read          # 중복 발송 가드가 오늘의 실행 이력을 조회하기 위해 필요
 
 jobs:
   send:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      # 주 트리거가 이미 오늘 몫을 보냈다면 백업 실행은 조용히 끝낸다.
+      # 실행 이력을 기준으로 판정하므로 커밋 성공 여부에 의존하지 않는다.
+      - name: 중복 발송 가드
+        id: guard
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          today=$(TZ=Asia/Seoul date +%F)
+          # 오늘(KST) 성공했거나 아직 돌고 있는 다른 실행을 센다. dry-run 실행은 제외한다.
+          done_count=$(gh run list \
+            --workflow daily-briefing.yml \
+            --limit 30 \
+            --json databaseId,status,conclusion,createdAt,displayTitle \
+            --jq "[ .[]
+                    | select(.databaseId != $GITHUB_RUN_ID)
+                    | select((.displayTitle | test(\"dry-run\")) | not)
+                    | select(.conclusion == \"success\" or .status == \"queued\" or .status == \"in_progress\")
+                    | select((.createdAt | fromdateiso8601 + 32400 | strftime(\"%Y-%m-%d\")) == \"$today\")
+                  ] | length")
+          if [ "$done_count" -gt 0 ]; then
+            echo "오늘($today) 이미 처리된 실행이 ${done_count}건 있어 백업 발송을 건너뛴다."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "오늘($today) 성공한 실행이 없다. 주 트리거가 실패한 것으로 보고 백업 경로로 발송한다."
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/checkout@v4
+        if: steps.guard.outputs.skip != 'true'
 
       - uses: actions/setup-python@v5
+        if: steps.guard.outputs.skip != 'true'
         with:
           python-version: '3.12'
           cache: pip
 
       - run: pip install -r requirements.txt
+        if: steps.guard.outputs.skip != 'true'
 
       - name: 브리핑 발송
+        if: steps.guard.outputs.skip != 'true'
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -50,7 +88,7 @@ jobs:
       # 야후는 러너 IP에 따라 일부 티커의 일봉을 한두 건만 돌려준다.
       # 누적해 둔 고가가 있어야 52주 고점이 흔들리지 않으므로 되돌려 커밋한다.
       - name: 고점 저장소 갱신 커밋
-        if: always()
+        if: always() && steps.guard.outputs.skip != 'true' && hashFiles('data/highs.json') != ''
         run: |
           if git diff --quiet -- data/highs.json; then
             echo "변경 없음"

@@ -63,9 +63,27 @@ python setup_bot.py <토큰>  새 봇 연결
 
 ## 스케줄
 
-Windows 작업 스케줄러에 `시장지표알리미`로 등록되어 있습니다 (매일 08:00).
-시각 변경은 작업 스케줄러에서 하거나:
+**매일 08:00 KST(월~금) 발송.** 실행은 GitHub Actions
+(`.github/workflows/daily-briefing.yml`)에서 이뤄지고, 시계는 두 겹입니다.
 
-```powershell
-Set-ScheduledTask -TaskName "시장지표알리미" -Trigger (New-ScheduledTaskTrigger -Daily -At 07:30)
+| | 트리거 | 시각 (UTC) | 역할 |
+|---|---|---|---|
+| 주 | Cloudflare Worker cron → `workflow_dispatch` | `0 23 * * 0-4` | 정시 발송 |
+| 백업 | 저장소 `schedule` cron | `30 23 * * 0-4` | 주 트리거 실패 시에만 |
+
+GitHub의 `schedule` cron은 정시 실행을 보장하지 않아 실측 26분~7시간까지 밀렸습니다.
+그래서 정시성이 보장되는 Cloudflare Cron Trigger를 주 시계로 쓰고, 저장소 cron은
+30분 뒤·비정각으로 물려 백업으로만 남겼습니다. 워크플로우 첫 스텝의 **중복 발송 가드**가
+그날 이미 성공했거나 진행 중인 실행을 조회해, 백업이 겹쳐 돌면 스스로 건너뜁니다.
+
+주 트리거의 설정·배포·점검은 [`trigger/README.md`](trigger/README.md)를 보세요.
+
+수동 발송·시험은 Actions 탭의 **Run workflow**(`force` / `dry_run` 입력 지원) 또는:
+
+```bash
+gh workflow run daily-briefing.yml -f dry_run=true
 ```
+
+로컬 Windows 작업 스케줄러 `시장지표알리미`는 **비활성화** 상태입니다(삭제하지 않음).
+노트북 절전 상태에서 타이머가 깨우지 못해 오후에 "아침 브리핑"이 오던 문제 때문입니다.
+되살리려면 `Enable-ScheduledTask -TaskName "시장지표알리미"`.

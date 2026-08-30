@@ -1,0 +1,16 @@
+name = "market-briefing-trigger"
+main = "src/worker.js"
+compatibility_date = "2026-08-01"
+
+# Cloudflare Cron Trigger는 UTC 기준이며 정시성이 보장된다.
+# 23:00 UTC 일~목 = 08:00 KST 월~금.
+[triggers]
+crons = ["0 23 * * 0-4"]
+
+[vars]
+REPO = "hajaboss/market-briefing"
+WORKFLOW = "daily-briefing.yml"
+REF = "main"
+
+# GH_TOKEN 은 vars 가 아니라 시크릿으로 넣는다:
+#   npx wrangler secret put GH_TOKEN
